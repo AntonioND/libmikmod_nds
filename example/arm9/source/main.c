@@ -6,7 +6,7 @@
 
 #include <mikmod9.h>
 
-#include "module_bin.h"
+#include "module_xm_bin.h"
 
 // Assign FIFO_USER_07 channel to libmikmod
 #define FIFO_LIBMIKMOD (FIFO_USER_07)
@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
 
     // Player_LoadMem() loads a module directly from memory it could be
     // possible to use Player_Load() to load from FAT or NitroFS.
-    MODULE *module = Player_LoadMem((const char *)module_bin, module_bin_size, 64, 0);
+    MODULE *module = Player_LoadMem((const char *)module_xm_bin, module_xm_bin_size, 64, 0);
     if (module == NULL)
     {
         printf("Could not load module, reason: \n%s\n",
