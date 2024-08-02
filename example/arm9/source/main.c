@@ -48,13 +48,38 @@ int main(int argc, char *argv[])
 
     soundEnable();
 
-    // Register hardware or software mixer
-    MikMod_RegisterDriver(&drv_nds_hw);
-    // MikMod_RegisterDriver(&drv_nds_sw);
+    printf("Select mixer:\n");
+    printf("\n");
+    printf("A: Hardware mixer\n");
+    printf("B: Software mixer\n");
+    printf("\n");
+
+    bool software_mixer;
+
+    while (1)
+    {
+        swiWaitForVBlank();
+
+        scanKeys();
+        uint32_t keys_down = keysDown();
+        if (keys_down & KEY_A)
+        {
+            MikMod_RegisterDriver(&drv_nds_hw);
+            software_mixer = false;
+            break;
+        }
+        else if (keys_down & KEY_B)
+        {
+            MikMod_RegisterDriver(&drv_nds_sw);
+            software_mixer = true;
+            break;
+        }
+    }
 
     // If we don't know what kind of module we're going to load we can register
     // all loaders, but that will result in a larger binary.
     MikMod_RegisterAllLoaders();
+
     // This will only load the loader of MOD files instead.
     //MikMod_RegisterLoader(&load_mod);
 
@@ -66,7 +91,8 @@ int main(int argc, char *argv[])
         wait_forever();
     }
 
-    printf("\nLoading module\n");
+    printf("\n");
+    printf("Loading module from RAM\n");
 
     // Player_LoadMemory() loads a module directly from memory it could be
     // possible to use Player_Load() to load from FAT or NitroFS.
@@ -105,9 +131,10 @@ int main(int argc, char *argv[])
         if (keys_down & KEY_B)
             break;
 
-        // When using the software driver we could call update here instead.
-        // When using the hardware driver there is no need to call anything.
-        //MikMod_Update();
+        // When using the software mixer it is needed to call this once per
+        // frame to mix audio.
+        if (software_mixer)
+            MikMod_Update();
 
         printf("Time: %lu:%02lu:%02lu\e[u", module->sngtime / 60000,
                 module->sngtime / 1000 % 60, module->sngtime / 10 % 100);
