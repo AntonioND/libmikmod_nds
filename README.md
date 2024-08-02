@@ -2,10 +2,10 @@
 
 ## Introduction
 
-http://blog.dev-scene.com/flatware
-
 This is an unofficial Nintendo DS port of libmikmod, a portable sound
-library for playing various music modules like MOD, S3M, IT, etc.
+library for playing various music modules like MOD, S3M, IT, etc. It runs on the
+ARM9 and it sends commands to the ARM7 only to update the state of the audio
+playback.
 
 It is based on libmikmod 3.3.11.1, commit 0e5b74433880 from its official
 repository: https://sourceforge.net/p/mikmod/mikmod/ci/master/tree/libmikmod/
@@ -53,6 +53,9 @@ The hardware driver uses sound channels 0 to x-1, where x is the number of
 channels in the module. When using the hardware driver you need to call the tick
 function on ARM9 every `md_bpm * 0.4` seconds.
 
+The software driver seems to be buggier than the hardware driver, and it
+occasionally crashes.
+
 Both the hardware and software driver needs to send messages from ARM9 to ARM7.
 The communication itself needs to be done in the application. All messages will
 be 32-bit and always >= `(1 << 28)`. You should allocate one of the user libnds
@@ -76,6 +79,7 @@ FIFO channels for the player messages.
 
 Original Nintendo DS port by Sten Larsson
 sten.larsson@gmail.com
+http://blog.dev-scene.com/flatware
 
 Contributions by Andreas Back
 bitstate@gmail.com
