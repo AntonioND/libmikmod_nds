@@ -6,9 +6,9 @@ BLOCKSDS	?= /opt/blocksds/core
 
 # User config
 
-NAME		:= libmikmod_example
+NAME		:= libmikmod_embedded
 
-GAME_TITLE	:= Basic example
+GAME_TITLE	:= Songs embedded
 GAME_SUBTITLE	:= libmikmod
 
 include $(BLOCKSDS)/sys/default_makefiles/rom_arm9arm7/Makefile
