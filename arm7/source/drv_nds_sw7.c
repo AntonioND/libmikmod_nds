@@ -8,7 +8,7 @@ void NDS_SW7_Init(NDS_SW_IPC* _ipc)
 	ipc = _ipc;
 }
 
-void NDS_SW7_Start()
+void NDS_SW7_Start(void)
 {
 	int period = (1<<24)/ipc->sampleRate;
 
@@ -32,7 +32,7 @@ void NDS_SW7_Start()
 	ipc->playing = true;
 }
 
-void NDS_SW7_Stop()
+void NDS_SW7_Stop(void)
 {
 	ipc->playing = false;
 
@@ -44,7 +44,7 @@ void NDS_SW7_Stop()
 	SCHANNEL_CR(0) = 0;
 }
 
-void NDS_SW7_Update()
+void NDS_SW7_Update(void)
 {
 	if(!ipc->playing)
 		return;
@@ -64,7 +64,7 @@ void NDS_SW7_Update()
 	ipc->readCursor = newCursor;
 }
 
-void NDS_SW7_Exit()
+void NDS_SW7_Exit(void)
 {
 	NDS_SW7_Stop();
 	ipc = 0;

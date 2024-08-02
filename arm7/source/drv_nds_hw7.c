@@ -8,16 +8,16 @@ void NDS_HW7_Init(NDS_HW_IPC* _ipc)
 	ipc = _ipc;
 }
 
-void NDS_HW7_Exit()
+void NDS_HW7_Exit(void)
 {
 	ipc = NULL;
 }
 
-void NDS_HW7_PlayStart()
+void NDS_HW7_PlayStart(void)
 {
 }
 
-void NDS_HW7_PlayStop()
+void NDS_HW7_PlayStop(void)
 {
 	int i;
 	for(i = 0; i < NDS_HW_MAXVOICES; i++) {
@@ -25,7 +25,7 @@ void NDS_HW7_PlayStop()
 	}
 }
 
-void NDS_HW7_Reset()
+void NDS_HW7_Reset(void)
 {
 }
 
