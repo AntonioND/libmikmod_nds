@@ -1,144 +1,92 @@
-#include <nds.h>
+// SPDX-License-Identifier: Zlib
+//
+// Copyright (C) 2005 Michael Noland (joat)
+// Copyright (C) 2005 Jason Rogers (Dovoto)
+// Copyright (C) 2005-2015 Dave Murphy (WinterMute)
+// Copyright (C) 2023 Antonio Niño Díaz
+
 #include <stdlib.h>
+
+#include <nds.h>
+#include <dswifi7.h>
+#include <nds.h>
 
 #include <mikmod7.h>
 
-void FIFOHandler()
+// Assign FIFO_USER_07 channel to libmikmod
+#define FIFO_LIBMIKMOD (FIFO_USER_07)
+
+volatile bool exit_loop = false;
+
+void power_button_callback(void)
 {
-	while(!(REG_IPC_FIFO_CR & IPC_FIFO_RECV_EMPTY))
-	{
-		u32 command = REG_IPC_FIFO_RX;
-		if(command >= 1<<28)
-			MikMod7_ProcessCommand(command);
-			
-		// process your own fifo messages here
-	}
+    exit_loop = true;
 }
 
-
-//---------------------------------------------------------------------------------
-void startSound(int sampleRate, const void* data, u32 bytes, u8 channel, u8 vol,  u8 pan, u8 format) {
-//---------------------------------------------------------------------------------
-	SCHANNEL_TIMER(channel)  = SOUND_FREQ(sampleRate);
-	SCHANNEL_SOURCE(channel) = (u32)data;
-	SCHANNEL_LENGTH(channel) = bytes >> 2 ;
-	SCHANNEL_CR(channel)     = SCHANNEL_ENABLE | SOUND_ONE_SHOT | SOUND_VOL(vol) | SOUND_PAN(pan) | (format==1?SOUND_8BIT:SOUND_16BIT);
+void vblank_handler(void)
+{
+    inputGetAndSend();
+    Wifi_Update();
 }
 
-
-//---------------------------------------------------------------------------------
-s32 getFreeSoundChannel() {
-//---------------------------------------------------------------------------------
-	int i;
-	for (i=0; i<16; i++) {
-		if ( (SCHANNEL_CR(i) & SCHANNEL_ENABLE) == 0 ) return i;
-	}
-	return -1;
+void libmikmod_Value32Handler(u32 command, void *userdata)
+{
+    if (command >= (1 << 28))
+        MikMod7_ProcessCommand(command);
 }
 
-int vcount;
-touchPosition first,tempPos;
+int main(int argc, char *argv[])
+{
+    // Initialize sound hardware
+    enableSound();
 
-//---------------------------------------------------------------------------------
-void VcountHandler() {
-//---------------------------------------------------------------------------------
-	static int lastbut = -1;
-	
-	uint16 but=0, x=0, y=0, xpx=0, ypx=0, z1=0, z2=0;
+    // Read user information from the firmware (name, birthday, etc)
+    readUserSettings();
 
-	but = REG_KEYXY;
+    // Stop LED blinking
+    ledBlink(0);
 
-	if (!( (but ^ lastbut) & (1<<6))) {
- 
-		tempPos = touchReadXY();
+    // Using the calibration values read from the firmware with
+    // readUserSettings(), calculate some internal values to convert raw
+    // coordinates into screen coordinates.
+    touchInit();
 
-		x = tempPos.x;
-		y = tempPos.y;
-		xpx = tempPos.px;
-		ypx = tempPos.py;
-		z1 = tempPos.z1;
-		z2 = tempPos.z2;
-		
-	} else {
-		lastbut = but;
-		but |= (1 <<6);
-	}
+    irqInit();
+    fifoInit();
 
-	if ( vcount == 80 ) {
-		first = tempPos;
-	} else {
-		if (	abs( xpx - first.px) > 10 || abs( ypx - first.py) > 10 ||
-				(but & ( 1<<6)) ) {
+    installWifiFIFO();
+    installSoundFIFO();
+    installSystemFIFO(); // Sleep mode, storage, firmware...
 
-			but |= (1 <<6);
-			lastbut = but;
+    // This sets a callback that is called when the power button in a DSi
+    // console is pressed. It has no effect in a DS.
+    setPowerButtonCB(power_button_callback);
 
-		} else { 	
-			IPC->mailBusy = 1;
-			IPC->touchX			= x;
-			IPC->touchY			= y;
-			IPC->touchXpx		= xpx;
-			IPC->touchYpx		= ypx;
-			IPC->touchZ1		= z1;
-			IPC->touchZ2		= z2;
-			IPC->mailBusy = 0;
-		}
-	}
-	IPC->buttons		= but;
-	vcount ^= (80 ^ 130);
-	SetYtrigger(vcount);
+    // Read current date from the RTC and setup an interrupt to update the time
+    // regularly. The interrupt simply adds one second every time, it doesn't
+    // read the date. Reading the RTC is very slow, so it's a bad idea to do it
+    // frequently.
+    initClockIRQTimer(3);
 
+    // Now that the FIFO is setup we can start sending input data to the ARM9.
+    irqSet(IRQ_VBLANK, vblank_handler);
+    irqEnable(IRQ_VBLANK);
+
+    // Initialize libxm7. It uses timer 0 internally.
+    //XM7_Initialize();
+    // Setup the FIFO handler for libmikmod
+    fifoSetValue32Handler(FIFO_LIBMIKMOD, libmikmod_Value32Handler, 0);
+
+    while (!exit_loop)
+    {
+        const uint16_t key_mask = KEY_SELECT | KEY_START | KEY_L | KEY_R;
+        uint16_t keys_pressed = ~REG_KEYINPUT;
+
+        if ((keys_pressed & key_mask) == key_mask)
+            exit_loop = true;
+
+        swiWaitForVBlank();
+    }
+
+    return 0;
 }
-
-//---------------------------------------------------------------------------------
-void VblankHandler(void) {
-//---------------------------------------------------------------------------------
-	u32 i;
-
-	//sound code  :)
-	TransferSound *snd = IPC->soundData;
-	IPC->soundData = 0;
-
-	if (0 != snd) {
-
-		for (i=0; i<snd->count; i++) {
-			s32 chan = getFreeSoundChannel();
-
-			if (chan >= 0) {
-				startSound(snd->data[i].rate, snd->data[i].data, snd->data[i].len, chan, snd->data[i].vol, snd->data[i].pan, snd->data[i].format);
-			}
-		}
-	}
-}
-
-//---------------------------------------------------------------------------------
-int main(int argc, char ** argv) {
-//---------------------------------------------------------------------------------
-    // init fifo
-	REG_IPC_FIFO_CR = IPC_FIFO_ENABLE | IPC_FIFO_SEND_CLEAR;
-
-	// Reset the clock if needed
-	rtcReset();
-
-	//enable sound
-	powerON(POWER_SOUND);
-	SOUND_CR = SOUND_ENABLE | SOUND_VOL(0x7F);
-	IPC->soundData = 0;
-
-	irqInit();
-	irqSet(IRQ_VBLANK, VblankHandler);
-	irqEnable(IRQ_VBLANK);
-	SetYtrigger(80);
-	vcount = 80;
-	irqSet(IRQ_VCOUNT, VcountHandler);
-	irqEnable(IRQ_VCOUNT);
-	
-	// Keep the ARM7 idle
-	while (1)
-	{
-		FIFOHandler();
-		swiWaitForVBlank();
-	}
-}
-
-
