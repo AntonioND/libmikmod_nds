@@ -108,6 +108,9 @@ int main(int argc, char *argv[])
         wait_forever();
     }
 
+    // Ensure that all the memory used by the module is visible by the ARM7
+    DC_FlushAll();
+
     printf("Title:    %s\n", module->songname);
     printf("Channels: %u\n", module->numchn);
 
