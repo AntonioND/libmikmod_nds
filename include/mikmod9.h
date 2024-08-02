@@ -2,7 +2,6 @@
 
 #include <mikmod.h>
 #include <mikmod_drv_nds.h>
-#include <mikmod_memoryloader.h>
 
 #ifdef __cplusplus
 extern "C" {
