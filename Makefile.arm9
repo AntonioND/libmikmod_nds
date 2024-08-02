@@ -19,7 +19,7 @@ BINDIRS		:=
 # Defines passed to all files
 # ---------------------------
 
-DEFINES		:=
+DEFINES		:= -DHAVE_LIMITS_H
 
 # Libraries
 # ---------

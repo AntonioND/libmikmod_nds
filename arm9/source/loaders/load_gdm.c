@@ -20,7 +20,7 @@
 
 /*==============================================================================
 
-  $Id: load_gdm.c,v 1.1.1.1 2004/01/21 01:36:35 raph Exp $
+  $Id$
 
   General DigiMusic (GDM) module loader
 
@@ -114,9 +114,9 @@ typedef struct GDMSAMPLE {
 static GDMHEADER *mh=NULL;	/* pointer to GDM header */
 static GDMNOTE *gdmbuf=NULL;	/* pointer to a complete GDM pattern */
 
-CHAR GDM_Version[]="General DigiMusic 1.xx";
+static CHAR GDM_Version[]="General DigiMusic 1.xx";
 
-BOOL GDM_Test(void)
+static BOOL GDM_Test(void)
 {
 	/* test for gdm magic numbers */
 	UBYTE id[4];
@@ -134,48 +134,57 @@ BOOL GDM_Test(void)
 	return 0;
 }
 
-BOOL GDM_Init(void)
+static BOOL GDM_Init(void)
 {
-	if (!(gdmbuf=(GDMNOTE*)_mm_malloc(32*64*sizeof(GDMNOTE)))) return 0;
-	if (!(mh=(GDMHEADER*)_mm_malloc(sizeof(GDMHEADER)))) return 0;
+	if (!(gdmbuf=(GDMNOTE*)MikMod_malloc(32*64*sizeof(GDMNOTE)))) return 0;
+	if (!(mh=(GDMHEADER*)MikMod_malloc(sizeof(GDMHEADER)))) return 0;
 
 	return 1;
 }
 
-void GDM_Cleanup(void)
+static void GDM_Cleanup(void)
 {
-	_mm_free(mh);
-	_mm_free(gdmbuf);
+	MikMod_free(mh);
+	MikMod_free(gdmbuf);
+	mh=NULL;
+	gdmbuf=NULL;
 }
 
-BOOL GDM_ReadPattern(void)
+static BOOL GDM_ReadPattern(void)
 {
-	int pos,flag,ch,i,maxch;
+	int pos,flag,ch,i;
 	GDMNOTE n;
-	UWORD length,x=0;
+	SLONG length,x=0;
 
 	/* get pattern length */
-	length=_mm_read_I_UWORD(modreader)-2;
+	length=(SLONG)_mm_read_I_UWORD(modreader);
+	length-=2;
 
 	/* clear pattern data */
 	memset(gdmbuf,255,32*64*sizeof(GDMNOTE));
 	pos=0;
-	maxch=0;
 
 	while (x<length) {
 		memset(&n,255,sizeof(GDMNOTE));
 		flag=_mm_read_UBYTE(modreader);
 		x++;
 
-		if (_mm_eof(modreader)) {
-			_mm_errno=MMERR_LOADING_PATTERN;
+		if (_mm_eof(modreader))
 			return 0;
-		}
 
 		ch=flag&31;
-		if (ch>maxch) maxch=ch;
+		if (ch > of.numchn)
+			return 0;
+
 		if (!flag) {
 			pos++;
+			if (x==length) {
+				if (pos > 64)
+				    return 0;
+			} else {
+				if (pos >= 64)
+				    return 0;
+			}
 			continue;
 		}
 		if (flag&0x60) {
@@ -200,7 +209,7 @@ BOOL GDM_ReadPattern(void)
 	return 1;
 }
 
-UBYTE *GDM_ConvertTrack(GDMNOTE*tr)
+static UBYTE *GDM_ConvertTrack(GDMNOTE*tr)
 {
 	int t,i=0;
 	UBYTE note,ins,inf;
@@ -212,7 +221,7 @@ UBYTE *GDM_ConvertTrack(GDMNOTE*tr)
 
 		if ((ins)&&(ins!=255))
 			UniInstrument(ins-1);
-		if (note!=255) {
+		if (note && note!=255) {
 			UniNote(((note>>4)*OCTAVE)+(note&0xf)-1);
 		}
 		for (i=0;i<4;i++) {
@@ -228,18 +237,18 @@ UBYTE *GDM_ConvertTrack(GDMNOTE*tr)
 					UniEffect(UNI_ITEFFECTG,inf);
 					break;
 				case 4:	/* vibrato */
-					UniEffect(UNI_ITEFFECTH,inf);
+					UniEffect(UNI_GDMEFFECT4,inf);
 					break;
 				case 5:	/* portamento+volslide */
 					UniEffect(UNI_ITEFFECTG,0);
 					UniEffect(UNI_S3MEFFECTD,inf);
 					break;
 				case 6:	/* vibrato+volslide */
-					UniEffect(UNI_ITEFFECTH,0);
+					UniEffect(UNI_GDMEFFECT4,0);
 					UniEffect(UNI_S3MEFFECTD,inf);
 					break;
 				case 7:	/* tremolo */
-					UniEffect(UNI_S3MEFFECTR,inf);
+					UniEffect(UNI_GDMEFFECT7,inf);
 					break;
 				case 8:	/* tremor */
 					UniEffect(UNI_S3MEFFECTI,inf);
@@ -262,37 +271,29 @@ UBYTE *GDM_ConvertTrack(GDMNOTE*tr)
 				case 0x0e:	/* extended */
 					switch (inf&0xf0) {
 						case 0x10:	/* fine portamento up */
-							UniEffect(UNI_S3MEFFECTF, 0x0f|((inf<<4)&0x0f));
+							UniEffect(UNI_S3MEFFECTF, 0xf0|(inf&0x0f));
 							break;
 						case 0x20:	/* fine portamento down */
 							UniEffect(UNI_S3MEFFECTE, 0xf0|(inf&0x0f));
 							break;
 						case 0x30:	/* glissando control */
-							UniEffect(SS_GLISSANDO, inf&0x0f);
-							break;
 						case 0x40:	/* vibrato waveform */
-							UniEffect(SS_VIBWAVE, inf&0x0f);
-							break;
 						case 0x50:	/* set c4spd */
-							UniEffect(SS_FINETUNE, inf&0x0f);
-							break;
 						case 0x60:	/* loop fun */
-							UniEffect(UNI_ITEFFECTS0, (inf&0x0f)|0xb0);
-							break;
 						case 0x70:	/* tremolo waveform */
-							UniEffect(SS_TREMWAVE, inf&0x0f);
+							UniPTEffect(0xe, inf);
 							break;
 						case 0x80:	/* extra fine porta up */
-							UniEffect(UNI_S3MEFFECTF, 0x0e|((inf<<4)&0x0f));
+							UniEffect(UNI_S3MEFFECTF, 0xe0|(inf&0x0f));
 							break;
 						case 0x90:	/* extra fine porta down */
 							UniEffect(UNI_S3MEFFECTE, 0xe0|(inf&0x0f));
 							break;
 						case 0xa0:	/* fine volslide up */
-							UniEffect(UNI_S3MEFFECTD, 0x0f|((inf<<4)&0x0f));
+							UniEffect(UNI_S3MEFFECTD, 0x0f|((inf&0x0f)<<4));
 							break;
 						case 0xb0:	/* fine volslide down */
-							UniEffect(UNI_S3MEFFECTE, 0xf0|(inf&0x0f));
+							UniEffect(UNI_S3MEFFECTD, 0xf0|(inf&0x0f));
 							break;
 						case 0xc0:	/* note cut */
 						case 0xd0:	/* note delay */
@@ -311,18 +312,15 @@ UBYTE *GDM_ConvertTrack(GDMNOTE*tr)
 					UniEffect(UNI_S3MEFFECTQ,inf);
 					break;
 				case 0x13:	/* set global volume */
-					UniEffect(UNI_XMEFFECTG,inf<<1);
+					UniEffect(UNI_XMEFFECTG,inf);
 					break;
 				case 0x14:	/* fine vibrato */
-					UniEffect(UNI_ITEFFECTU,inf);
+					UniEffect(UNI_GDMEFFECT14,inf);
 					break;
 				case 0x1e:	/* special */
 					switch (inf&0xf0) {
-						case 8:	/* set pan position */
-							if (inf >=128)
-								UniPTEffect(0x08,255);
-							else
-								UniPTEffect(0x08,inf<<1);
+						case 0x80:	/* set pan position */
+							UniPTEffect(0xe,inf);
 							break;
 					}
 					break;
@@ -337,7 +335,7 @@ UBYTE *GDM_ConvertTrack(GDMNOTE*tr)
 	return UniDup();
 }
 
-BOOL GDM_Load(BOOL curious)
+static BOOL GDM_Load(BOOL curious)
 {
 	int i,x,u,track;
 	SAMPLE *q;
@@ -389,7 +387,7 @@ BOOL GDM_Load(BOOL curious)
 	}
 
 	/* now we fill */
-	of.modtype=strdup(GDM_Version);
+	of.modtype=MikMod_strdup(GDM_Version);
 	of.modtype[18]=mh->majorver+'0';
 	of.modtype[20]=mh->minorver/10+'0';
 	of.modtype[21]=mh->minorver%10+'0';
@@ -463,16 +461,21 @@ BOOL GDM_Load(BOOL curious)
 		q->length=s.length;
 		q->loopstart=s.loopbeg;
 		q->loopend=s.loopend;
-		q->volume=s.vol;
-		q->panning=s.pan;
+		q->volume=64;
 		q->seekpos=position;
 
 		position +=s.length;
 
+		/* Only use the sample volume byte if bit 2 is set. When bit 3 is set,
+		   the sample panning is supposed to be used, but 2GDM isn't capable
+		   of making a GDM using this feature; the panning byte is always 0xFF
+		   or junk. Likewise, bit 5 is unused (supposed to be LZW compression). */
 		if (s.flags&1)
 			q->flags |=SF_LOOP;
 		if (s.flags&2)
 			q->flags |=SF_16BITS;
+		if ((s.flags&4) && s.vol<=64)
+			q->volume=s.vol;
 		if (s.flags&16)
 			q->flags |=SF_STEREO;
 		q++;
@@ -533,7 +536,7 @@ BOOL GDM_Load(BOOL curious)
 	return 1;
 }
 
-CHAR *GDM_LoadTitle(void)
+static CHAR *GDM_LoadTitle(void)
 {
 	CHAR s[32];
 

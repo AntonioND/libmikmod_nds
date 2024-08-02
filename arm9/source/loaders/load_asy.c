@@ -6,12 +6,12 @@
 	it under the terms of the GNU Library General Public License as
 	published by the Free Software Foundation; either version 2 of
 	the License, or (at your option) any later version.
- 
+
 	This program is distributed in the hope that it will be useful,
 	but WITHOUT ANY WARRANTY; without even the implied warranty of
 	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 	GNU Library General Public License for more details.
- 
+
 	You should have received a copy of the GNU Library General Public
 	License along with this library; if not, write to the Free Software
 	Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
@@ -20,15 +20,15 @@
 
 /*==============================================================================
 
-  $Id: load_asy.c,v 1.3 2004/01/28 01:18:22 raph Exp $
+  $Id$
 
   ASYLUM Music Format v1.0 (.amf) loader
   adapted from load_mod.c by Raphael Assenat <raph@raphnet.net>,
   with the help of the AMF2MOD utility sourcecode,
   written to convert crusader's amf files into 8
   channels mod file in 1995 by Mr. P / Powersource
-  mrp@fish.share.net, ac054@sfn.saskatoon.sk.ca 
-  
+  mrp@fish.share.net, ac054@sfn.saskatoon.sk.ca
+
 
 ==============================================================================*/
 
@@ -40,7 +40,6 @@
 #include <unistd.h>
 #endif
 
-#include <ctype.h>
 #include <string.h>
 
 #include "mikmod_internals.h"
@@ -58,8 +57,12 @@ typedef struct MSAMPINFO {
 
 typedef struct MODULEHEADER {
 	CHAR songname[21];
+	UBYTE initspeed;
+	UBYTE inittempo;
+	UBYTE num_samples;
 	UBYTE num_patterns;	/* number of patterns used */
 	UBYTE num_orders;
+	UBYTE reppos;
 	UBYTE positions[256];	/* which pattern to play at pos */
 	MSAMPINFO samples[64];	/* all sampleinfo */
 } MODULEHEADER;
@@ -76,8 +79,9 @@ typedef struct MODNOTE {
 
 /* This table is taken from AMF2MOD.C
  * written in 1995 by Mr. P / Powersource
- * mrp@fish.share.net, ac054@sfn.saskatoon.sk.ca */ 
-UWORD periodtable[]={6848,6464,6096,5760,5424,5120,4832,4560,4304,
+ * mrp@fish.share.net, ac054@sfn.saskatoon.sk.ca */
+static const UWORD periodtable[] = {
+	6848,6464,6096,5760,5424,5120,4832,4560,4304,
 	4064,3840,3628,3424,3232,3048,2880,2712,2560,
 	2416,2280,2152,2032,1920,1814,1712,1616,1524,
 	1440,1356,1280,1208,1140,1076,1016, 960, 907,
@@ -108,7 +112,7 @@ static BOOL ASY_CheckType(UBYTE *id, UBYTE *numchn, CHAR **descr)
 		modtype = 1;
 		return 1;
 	}
-	
+
 	return 0;
 }
 
@@ -131,23 +135,24 @@ static BOOL ASY_Test(void)
 
 static BOOL ASY_Init(void)
 {
-	if (!(mh = (MODULEHEADER *)_mm_malloc(sizeof(MODULEHEADER))))
+	if (!(mh = (MODULEHEADER *)MikMod_malloc(sizeof(MODULEHEADER))))
 		return 0;
 	return 1;
 }
 
 static void ASY_Cleanup(void)
 {
-	_mm_free(mh);
-	_mm_free(patbuf);
+	MikMod_free(mh);
+	MikMod_free(patbuf);
+	mh = NULL;
+	patbuf = NULL;
 }
 
-static void ConvertNote(MODNOTE *n)
+static int ConvertNote(MODNOTE *n)
 {
 	UBYTE instrument, effect, effdat, note;
 	UWORD period;
-	UBYTE lastnote = 0;
-	
+
 	instrument = n->b&0x1f;
 	effect = n->c;
 	effdat = n->d;
@@ -158,10 +163,10 @@ static void ConvertNote(MODNOTE *n)
 	} else {
 		period = 0;
 	}
-	
+
 	/* Convert the period to a note number */
 	note = 0;
-	if (period) 
+	if (period)
 	{
 		for (note = 0; note < 7 * OCTAVE; note++)
 			if (period >= npertab[note])
@@ -174,7 +179,7 @@ static void ConvertNote(MODNOTE *n)
 
 	if (instrument) {
 		/* if instrument does not exist, note cut */
-		if ((instrument > 31) || (!mh->samples[instrument - 1].length)) {
+		if ((instrument > mh->num_samples) || (!mh->samples[instrument - 1].length)) {
 			UniPTEffect(0xc, 0);
 			if (effect == 0xc)
 				effect = effdat = 0;
@@ -186,12 +191,11 @@ static void ConvertNote(MODNOTE *n)
 					UniInstrument(instrument - 1);
 				/* ...otherwise, only adjust volume... */
 				else {
-					/* ...unless an effect was specified, 
-					 * which forces a new note to be 
+					/* ...unless an effect was specified,
+					 * which forces a new note to be
 					 * played */
 					if (effect || effdat) {
 						UniInstrument(instrument - 1);
-						note = lastnote;
 					} else
 						UniPTEffect(0xc,
 							mh->samples[instrument -
@@ -200,14 +204,11 @@ static void ConvertNote(MODNOTE *n)
 			} else {
 				/* Fasttracker handling */
 				UniInstrument(instrument - 1);
-				if (!note)
-					note = lastnote;
 			}
 		}
 	}
 	if (note) {
 		UniNote(note + 2 * OCTAVE - 1);
-		lastnote = note;
 	}
 
 	/* Convert pattern jump from Dec to Hex */
@@ -218,7 +219,15 @@ static void ConvertNote(MODNOTE *n)
 	if ((effect == 0xa) && (effdat & 0xf) && (effdat & 0xf0))
 		effdat &= 0xf0;
 
+	if (effect == 0x1b) {
+		return 0; /* UniEffect(UNI_S3MEFFECTQ,dat) ? */
+	}
+	if (effect > 0xf) {
+		return 0;		/* return -1 to fail? */
+	}
+
 	UniPTEffect(effect, effdat);
+	return 0;
 }
 
 static UBYTE *ConvertTrack(MODNOTE *n)
@@ -227,7 +236,8 @@ static UBYTE *ConvertTrack(MODNOTE *n)
 
 	UniReset();
 	for (t = 0; t < 64; t++) {
-		ConvertNote(n);
+		if (ConvertNote(n) < 0)
+			return NULL;
 		UniNewline();
 		n += of.numchn;
 	}
@@ -245,9 +255,9 @@ static BOOL ML_LoadPatterns(void)
 	if (!AllocTracks()) {
 		return 0;
 	}
-	
+
 	/* Allocate temporary buffer for loading and converting the patterns */
-	if (!(patbuf = (MODNOTE *)_mm_calloc(64U * of.numchn, sizeof(MODNOTE))))
+	if (!(patbuf = (MODNOTE *)MikMod_calloc(64U * of.numchn, sizeof(MODNOTE))))
 		return 0;
 
 
@@ -278,29 +288,40 @@ static BOOL ASY_Load(BOOL curious)
 	CHAR *descr=asylum;
 	ULONG seekpos;
 
-	// no title in asylum amf files :(
-	strcpy(mh->songname, "");
+	/* no title in asylum amf files :( */
+	mh->songname[0] = '\0';
 
-	_mm_fseek(modreader, 0x23, SEEK_SET);
+	_mm_fseek(modreader, 0x20, SEEK_SET);
+	mh->initspeed = _mm_read_UBYTE(modreader);
+	mh->inittempo = _mm_read_UBYTE(modreader);
+	mh->num_samples = _mm_read_UBYTE(modreader);
 	mh->num_patterns = _mm_read_UBYTE(modreader);
 	mh->num_orders = _mm_read_UBYTE(modreader);
-	
-	// skip unknown byte
-	_mm_read_UBYTE(modreader);
+	mh->reppos = _mm_read_UBYTE(modreader);
+
 	_mm_read_UBYTES(mh->positions, 256, modreader);
-	
+
+	#ifdef MIKMOD_DEBUG
+	fprintf(stderr, "ASY: bpm=%d, spd=%d, numins=%d, numpat=%d\n",
+		mh->inittempo, mh->initspeed, mh->num_samples, mh->num_patterns);
+	#endif
+	if (!mh->initspeed || !mh->inittempo || mh->num_samples > 64) {
+		_mm_errno = MMERR_NOT_A_MODULE;
+		return 0;
+	}
+
 	/* read samples headers*/
-	for (t = 0; t < 64; t++) {
+	for (t = 0; t < mh->num_samples; t++) {
 		s = &mh->samples[t];
-		
+
 		_mm_fseek(modreader, 0x126 + (t*37), SEEK_SET);
-		
+
 		_mm_read_string(s->samplename, 22, modreader);
-		s->samplename[21] = 0;	/* just in case */
-		
+		s->samplename[22] = 0;
+
 		s->finetune = _mm_read_UBYTE(modreader);
 		s->volume = _mm_read_UBYTE(modreader);
-		_mm_read_UBYTE(modreader); // skip unknown byte
+		_mm_skip_BYTE(modreader);/* skip unknown byte */
 		s->length = _mm_read_I_ULONG(modreader);
 		s->reppos = _mm_read_I_ULONG(modreader);
 		s->replen = _mm_read_I_ULONG(modreader);
@@ -311,28 +332,34 @@ static BOOL ASY_Load(BOOL curious)
 		return 0;
 	}
 
+	_mm_fseek(modreader, 37*(64-mh->num_samples), SEEK_CUR);
+
 	/* set module variables */
-	of.initspeed = 6;
-	of.inittempo = 125;
+	of.initspeed = mh->initspeed;
+	of.inittempo = mh->inittempo;
 	of.numchn = 8;
 	modtype = 0;
-	of.songname = DupStr(mh->songname, 21, 1);
+	of.songname = MikMod_strdup("");
 	of.numpos = mh->num_orders;
-	of.reppos = 0;
+	of.reppos = mh->reppos;
 	of.numpat = mh->num_patterns;
 	of.numtrk = of.numpat * of.numchn;
 
-	
 	/* Copy positions (orders) */
 	if (!AllocPositions(of.numpos))
 		return 0;
 	for (t = 0; t < of.numpos; t++) {
 		of.positions[t] = mh->positions[t];
+		if (of.positions[t]>of.numpat) { /* SANITIY CHECK */
+		/*	fprintf(stderr,"positions[%d]=%d > numpat=%d\n",t,of.positions[t],of.numpat);*/
+			_mm_errno = MMERR_LOADING_HEADER;
+			return 0;
+		}
 	}
 
 	/* Finally, init the sampleinfo structures  */
-	of.numins = 31;
-	of.numsmp = 31;
+	of.numins = mh->num_samples;
+	of.numsmp = mh->num_samples;
 	if (!AllocSamples())
 		return 0;
 	s = mh->samples;
@@ -341,7 +368,7 @@ static BOOL ASY_Load(BOOL curious)
 	for (t = 0; t < of.numins; t++) {
 		/* convert the samplename */
 		q->samplename = DupStr(s->samplename, 23, 1);
-		
+
 		/* init the sampleinfo variables */
 		q->speed = finetune[s->finetune & 0xf];
 		q->volume = s->volume & 0x7f;
@@ -349,16 +376,16 @@ static BOOL ASY_Load(BOOL curious)
 		q->loopstart = (ULONG)s->reppos;
 		q->loopend = (ULONG)q->loopstart + (s->replen);
 		q->length = (ULONG)s->length;
-		
+
 		q->flags = SF_SIGNED;
-	
+
 		q->seekpos = seekpos;
 		seekpos += q->length;
-		
+
 		if ((s->replen) > 2) {
 			q->flags |= SF_LOOP;
 		}
-		
+
 		/* fix replen if repend > length */
 		if (q->loopend > q->length)
 			q->loopend = q->length;
@@ -367,7 +394,7 @@ static BOOL ASY_Load(BOOL curious)
 		q++;
 	}
 
-	of.modtype = strdup(descr);
+	of.modtype = MikMod_strdup(descr);
 
 	if (!ML_LoadPatterns())
 		return 0;
@@ -377,9 +404,7 @@ static BOOL ASY_Load(BOOL curious)
 
 static CHAR *ASY_LoadTitle(void)
 {
-	CHAR *s = ""; // no titles
-
-	return (DupStr(s, 21, 1));
+	return MikMod_strdup("");
 }
 
 /*========== Loader information */

@@ -6,12 +6,12 @@
 	it under the terms of the GNU Library General Public License as
 	published by the Free Software Foundation; either version 2 of
 	the License, or (at your option) any later version.
- 
+
 	This program is distributed in the hope that it will be useful,
 	but WITHOUT ANY WARRANTY; without even the implied warranty of
 	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 	GNU Library General Public License for more details.
- 
+
 	You should have received a copy of the GNU Library General Public
 	License along with this library; if not, write to the Free Software
 	Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
@@ -20,7 +20,7 @@
 
 /*==============================================================================
 
-  $Id: load_stm.c,v 1.1.1.1 2004/01/21 01:36:35 raph Exp $
+  $Id$
 
   Screamtracker 2 (STM) module loader
 
@@ -74,7 +74,7 @@ typedef struct STMHEADER {
 	UBYTE ver_minor;
 	UBYTE inittempo;      /* initspeed= stm inittempo>>4  */
 	UBYTE numpat;         /* number of patterns  */
-	UBYTE globalvol;     
+	UBYTE globalvol;
 	UBYTE reserved[13];
 	STMSAMPLE sample[31]; /* STM sample data */
 	UBYTE patorder[128];  /* Docs say 64 - actually 128 */
@@ -90,7 +90,7 @@ static STMNOTE *stmbuf = NULL;
 static STMHEADER *mh = NULL;
 
 /* tracker identifiers */
-static CHAR* STM_Version[STM_NTRACKERS] = {
+static const CHAR * STM_Version[STM_NTRACKERS] = {
 	"Screamtracker 2",
 	"Converted by MOD2STM (STM format)",
 	"Wuzamod (STM format)"
@@ -98,11 +98,12 @@ static CHAR* STM_Version[STM_NTRACKERS] = {
 
 /*========== Loader code */
 
-BOOL STM_Test(void)
+static BOOL STM_Test(void)
 {
 	UBYTE str[44];
 	int t;
 
+	memset(str,0,44);
 	_mm_fseek(modreader,20,SEEK_SET);
 	_mm_read_UBYTES(str,44,modreader);
 	if(str[9]!=2) return 0;	/* STM Module = filetype 2 */
@@ -110,7 +111,7 @@ BOOL STM_Test(void)
 	/* Prevent false positives for S3M files */
 	if(!memcmp(str+40,"SCRM",4))
 		return 0;
-	
+
 	for (t=0;t<STM_NTRACKERS;t++)
 		if(!memcmp(str,STM_Signatures[t],8))
 			return 1;
@@ -118,18 +119,20 @@ BOOL STM_Test(void)
 	return 0;
 }
 
-BOOL STM_Init(void)
+static BOOL STM_Init(void)
 {
-	if(!(mh=(STMHEADER*)_mm_malloc(sizeof(STMHEADER)))) return 0;
-	if(!(stmbuf=(STMNOTE*)_mm_calloc(64U*4,sizeof(STMNOTE)))) return 0;
+	if(!(mh=(STMHEADER*)MikMod_malloc(sizeof(STMHEADER)))) return 0;
+	if(!(stmbuf=(STMNOTE*)MikMod_calloc(64U*4,sizeof(STMNOTE)))) return 0;
 
 	return 1;
 }
 
 static void STM_Cleanup(void)
 {
-	_mm_free(mh);
-	_mm_free(stmbuf);
+	MikMod_free(mh);
+	MikMod_free(stmbuf);
+	mh=NULL;
+	stmbuf=NULL;
 }
 
 static void STM_ConvertNote(STMNOTE *n)
@@ -145,7 +148,7 @@ static void STM_ConvertNote(STMNOTE *n)
 
 	if((ins)&&(ins<32)) UniInstrument(ins-1);
 
-	/* special values of [SBYTE0] are handled here 
+	/* special values of [SBYTE0] are handled here
 	   we have no idea if these strange values will ever be encountered.
 	   but it appears as those stms sound correct. */
 	if((note==254)||(note==252)) {
@@ -222,7 +225,7 @@ static UBYTE *STM_ConvertTrack(STMNOTE *n)
 	return UniDup();
 }
 
-static BOOL STM_LoadPatterns(void)
+static BOOL STM_LoadPatterns(int pattoload)
 {
 	int t,s,tracks=0;
 
@@ -230,7 +233,7 @@ static BOOL STM_LoadPatterns(void)
 	if(!AllocTracks()) return 0;
 
 	/* Allocate temporary buffer for loading and converting the patterns */
-	for(t=0;t<of.numpat;t++) {
+	for(t=0;t<pattoload;t++) {
 		for(s=0;s<(64U*of.numchn);s++) {
 			stmbuf[s].note   = _mm_read_UBYTE(modreader);
 			stmbuf[s].insvol = _mm_read_UBYTE(modreader);
@@ -249,10 +252,13 @@ static BOOL STM_LoadPatterns(void)
 	return 1;
 }
 
-BOOL STM_Load(BOOL curious)
+static BOOL STM_Load(BOOL curious)
 {
-	int t; 
-	ULONG MikMod_ISA; /* We must generate our own ISA, it's not stored in stm */
+	BOOL blankpattern=0;
+	int pattoload;
+	int t;
+	ULONG samplestart;
+	ULONG sampleend;
 	SAMPLE *q;
 
 	/* try to read stm header */
@@ -270,6 +276,10 @@ BOOL STM_Load(BOOL curious)
 	mh->numpat      =_mm_read_UBYTE(modreader);
 	mh->globalvol   =_mm_read_UBYTE(modreader);
 	_mm_read_UBYTES(mh->reserved,13,modreader);
+	if(mh->numpat > 128) {
+		_mm_errno = MMERR_NOT_A_MODULE;
+		return 0;
+	}
 
 	for(t=0;t<31;t++) {
 		STMSAMPLE *s=&mh->sample[t];	/* STM sample data */
@@ -297,7 +307,7 @@ BOOL STM_Load(BOOL curious)
 	/* set module variables */
 	for(t=0;t<STM_NTRACKERS;t++)
 		if(!memcmp(mh->trackername,STM_Signatures[t],8)) break;
-	of.modtype   = strdup(STM_Version[t]);
+	of.modtype   = MikMod_strdup(STM_Version[t]);
 	of.songname  = DupStr(mh->songname,20,1); /* make a cstr of songname */
 	of.numpat    = mh->numpat;
 	of.inittempo = 125;                     /* mh->inittempo+0x1c; */
@@ -310,19 +320,38 @@ BOOL STM_Load(BOOL curious)
 	t=0;
 	if(!AllocPositions(0x80)) return 0;
 	/* 99 terminates the patorder list */
-	while((mh->patorder[t]<=99)&&(mh->patorder[t]<mh->numpat)) {
+	while(mh->patorder[t]<99) {
 		of.positions[t]=mh->patorder[t];
-		t++;
+
+		/* Screamtracker 2 treaks patterns >= numpat as blank patterns.
+		 * Example modules: jimmy.stm, Rauno/dogs.stm, Skaven/hevijanis istu maas.stm.
+		 *
+		 * Patterns>=64 have unpredictable behavior in Screamtracker 2,
+		 * but nothing seems to rely on them, so they're OK to blank too.
+		 */
+		if(of.positions[t]>=mh->numpat) {
+			of.positions[t]=mh->numpat;
+			blankpattern=1;
+		}
+
+		if(++t == 0x80) {
+			_mm_errno = MMERR_NOT_A_MODULE;
+			return 0;
+		}
 	}
-	if(mh->patorder[t]<=99) t++;
+	/* Allocate an extra blank pattern if the module references one. */
+	pattoload=of.numpat;
+	if(blankpattern) of.numpat++;
 	of.numpos=t;
 	of.numtrk=of.numpat*of.numchn;
 	of.numins=of.numsmp=31;
 
 	if(!AllocSamples()) return 0;
-	if(!STM_LoadPatterns()) return 0;
-	MikMod_ISA=_mm_ftell(modreader);
-	MikMod_ISA=(MikMod_ISA+15)&0xfffffff0;	/* normalize */
+	if(!STM_LoadPatterns(pattoload)) return 0;
+
+	samplestart=_mm_ftell(modreader);
+	_mm_fseek(modreader,0,SEEK_END);
+	sampleend=_mm_ftell(modreader);
 
 	for(q=of.samples,t=0;t<of.numsmp;t++,q++) {
 		/* load sample info */
@@ -330,24 +359,51 @@ BOOL STM_Load(BOOL curious)
 		q->speed      = (mh->sample[t].c2spd * 8363) / 8448;
 		q->volume     = mh->sample[t].volume;
 		q->length     = mh->sample[t].length;
-		if (/*(!mh->sample[t].volume)||*/(q->length==1)) q->length=0;
+		if (!mh->sample[t].volume || q->length==1) q->length=0;
 		q->loopstart  = mh->sample[t].loopbeg;
 		q->loopend    = mh->sample[t].loopend;
-		q->seekpos    = MikMod_ISA;
+		q->seekpos    = mh->sample[t].reserved << 4;
 
-		MikMod_ISA+=q->length;
-		MikMod_ISA=(MikMod_ISA+15)&0xfffffff0;	/* normalize */
+		/* Sanity checks to make sure samples are bounded within the file. */
+		if(q->length) {
+			if(q->seekpos<samplestart) {
+#ifdef MIKMOD_DEBUG
+				fprintf(stderr,"rejected sample # %d (seekpos=%u < samplestart=%u)\n",t,q->seekpos,samplestart);
+#endif
+				_mm_errno = MMERR_LOADING_SAMPLEINFO;
+				return 0;
+			}
+			/* Some .STMs seem to rely on allowing truncated samples... */
+			if(q->seekpos>=sampleend) {
+#ifdef MIKMOD_DEBUG
+				fprintf(stderr,"truncating sample # %d from length %u to 0\n",t,q->length);
+#endif
+				q->seekpos = q->length = 0;
+			} else if(q->seekpos+q->length>sampleend) {
+#ifdef MIKMOD_DEBUG
+				fprintf(stderr,"truncating sample # %d from length %u to %u\n",t,q->length,sampleend - q->seekpos);
+#endif
+				q->length = sampleend - q->seekpos;
+			}
+		}
+		else
+			q->seekpos = 0;
 
 		/* contrary to the STM specs, sample data is signed */
 		q->flags = SF_SIGNED;
 
-		if(q->loopend && q->loopend != 0xffff)
-				q->flags|=SF_LOOP;
+		if(q->loopend && q->loopend != 0xffff && q->loopstart < q->length) {
+			q->flags|=SF_LOOP;
+			if (q->loopend > q->length)
+				q->loopend = q->length;
+		}
+		else
+			q->loopstart = q->loopend = 0;
 	}
 	return 1;
 }
 
-CHAR *STM_LoadTitle(void)
+static CHAR *STM_LoadTitle(void)
 {
 	CHAR s[20];
 
@@ -369,6 +425,5 @@ MIKMODAPI MLOADER load_stm={
 	STM_Cleanup,
 	STM_LoadTitle
 };
-
 
 /* ex:set ts=4: */

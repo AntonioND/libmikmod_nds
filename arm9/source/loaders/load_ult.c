@@ -6,12 +6,12 @@
 	it under the terms of the GNU Library General Public License as
 	published by the Free Software Foundation; either version 2 of
 	the License, or (at your option) any later version.
- 
+
 	This program is distributed in the hope that it will be useful,
 	but WITHOUT ANY WARRANTY; without even the implied warranty of
 	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 	GNU Library General Public License for more details.
- 
+
 	You should have received a copy of the GNU Library General Public
 	License along with this library; if not, write to the Free Software
 	Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
@@ -19,8 +19,6 @@
 */
 
 /*==============================================================================
-
-  $Id: load_ult.c,v 1.1.1.1 2004/01/21 01:36:35 raph Exp $
 
   Ultratracker (ULT) module loader
 
@@ -80,13 +78,13 @@ typedef struct ULTEVENT {
 #define ULTS_REVERSE    16
 
 #define ULT_VERSION_LEN 18
-static	CHAR ULT_Version[ULT_VERSION_LEN]="Ultra Tracker v1.x";
+static	CHAR ULT_Version[ULT_VERSION_LEN+1]="Ultra Tracker v1.x";
 
 static	ULTEVENT ev;
 
 /*========== Loader code */
 
-BOOL ULT_Test(void)
+static BOOL ULT_Test(void)
 {
 	CHAR id[16];
 
@@ -96,12 +94,12 @@ BOOL ULT_Test(void)
 	return 1;
 }
 
-BOOL ULT_Init(void)
+static BOOL ULT_Init(void)
 {
 	return 1;
 }
 
-void ULT_Cleanup(void)
+static void ULT_Cleanup(void)
 {
 }
 
@@ -124,7 +122,7 @@ static UBYTE ReadUltEvent(ULTEVENT* event)
 	return rep;
 }
 
-BOOL ULT_Load(BOOL curious)
+static BOOL ULT_Load(BOOL curious)
 {
 	int t,u,tracks=0;
 	SAMPLE *q;
@@ -182,17 +180,19 @@ BOOL ULT_Load(BOOL curious)
 		}
 
 		q->samplename=DupStr(s.samplename,32,1);
-		/* The correct formula for the coefficient would be
-		   pow(2,(double)s.finetume/OCTAVE/32768), but to avoid floating point
-		   here, we'll use a first order approximation here.
+		/* The correct formula would be
+		   s.speed * pow(2, (double)s.finetune / (OCTAVE * 32768))
+		   but to avoid libm, we'll use a first order approximation.
 		   1/567290 == Ln(2)/OCTAVE/32768 */
-		q->speed=s.speed+s.speed*(((SLONG)s.speed*(SLONG)s.finetune)/567290);
+		if(!s.finetune) q->speed = s.speed;
+		else q->speed= s.speed*((double)s.finetune/567290.0 + 1.0);
 		q->length    = s.sizeend-s.sizestart;
 		q->volume    = s.volume>>2;
 		q->loopstart = s.loopstart;
 		q->loopend   = s.loopend;
 		q->flags = SF_SIGNED;
 		if(s.flags&ULTS_LOOP) q->flags|=SF_LOOP;
+		else q->loopstart = q->loopend = 0;
 		if(s.flags&ULTS_16BITS) {
 			s.sizeend+=(s.sizeend-s.sizestart);
 			s.sizestart<<=1;
@@ -206,12 +206,6 @@ BOOL ULT_Load(BOOL curious)
 	if(!AllocPositions(256)) return 0;
 	for(t=0;t<256;t++)
 		of.positions[t]=_mm_read_UBYTE(modreader);
-	for(t=0;t<256;t++)
-		if(of.positions[t]==255) {
-			of.positions[t]=LAST_PATTERN;
-			break;
-		}
-	of.numpos=t;
 
 	noc=_mm_read_UBYTE(modreader);
 	nop=_mm_read_UBYTE(modreader);
@@ -219,11 +213,29 @@ BOOL ULT_Load(BOOL curious)
 	of.numchn=++noc;
 	of.numpat=++nop;
 	of.numtrk=of.numchn*of.numpat;
+
+	for(t=0;t<256;t++) {
+		if(of.positions[t]==255) {
+			of.positions[t]=LAST_PATTERN;
+			break;
+		}
+		if (of.positions[t]>of.numpat) { /* SANITIY CHECK */
+		/*	fprintf(stderr,"positions[%d]=%d > numpat=%d\n",t,of.positions[t],of.numpat);*/
+			_mm_errno = MMERR_LOADING_HEADER;
+			return 0;
+		}
+	}
+	of.numpos=t;
+
 	if(!AllocTracks()) return 0;
 	if(!AllocPatterns()) return 0;
 	for(u=0;u<of.numchn;u++)
 		for(t=0;t<of.numpat;t++)
 			of.patterns[(t*of.numchn)+u]=tracks++;
+
+	/* Secunia SA37775 / CVE-2009-3996 */
+	if (of.numchn>=UF_MAXCHAN)
+		of.numchn=UF_MAXCHAN - 1;
 
 	/* read pan position table for v1.5 and higher */
 	if(mh.id[14]>='3') {
@@ -233,6 +245,11 @@ BOOL ULT_Load(BOOL curious)
 
 	for(t=0;t<of.numtrk;t++) {
 		int rep,row=0;
+		/* FIXME: unrolling continuous portamento is a HACK and needs to
+		 * be replaced with a real continuous effect. This implementation
+		 * breaks when tone portamento continues between patterns. See
+		 * discussion in https://github.com/sezero/mikmod/pull/40 . */
+		int continuePortaToNote = 0;
 
 		UniReset();
 		while(row<64) {
@@ -248,14 +265,22 @@ BOOL ULT_Load(BOOL curious)
 				int offset;
 
 				if(ev.sample) UniInstrument(ev.sample-1);
-				if(ev.note)   UniNote(ev.note+2*OCTAVE-1);
+				if(ev.note) {
+					UniNote(ev.note+2*OCTAVE-1);
+					continuePortaToNote = 0;
+				}
 
 				/* first effect - various fixes by Alexander Kerkhove and
 				                  Thomas Neumann */
 				eff = ev.eff>>4;
+
+				if (continuePortaToNote && (eff != 0x3) && ((ev.eff & 0xf) != 0x3))
+					UniEffect(UNI_ITEFFECTG, 0);
+
 				switch(eff) {
 					case 0x3: /* tone portamento */
 						UniEffect(UNI_ITEFFECTG,ev.dat2);
+						continuePortaToNote = 1;
 						break;
 					case 0x5:
 						break;
@@ -280,6 +305,7 @@ BOOL ULT_Load(BOOL curious)
 				switch(eff) {
 					case 0x3: /* tone portamento */
 						UniEffect(UNI_ITEFFECTG,ev.dat1);
+						continuePortaToNote = 1;
 						break;
 					case 0x5:
 						break;
@@ -308,7 +334,7 @@ BOOL ULT_Load(BOOL curious)
 	return 1;
 }
 
-CHAR *ULT_LoadTitle(void)
+static CHAR * ULT_LoadTitle(void)
 {
 	CHAR s[32];
 
@@ -330,6 +356,5 @@ MIKMODAPI MLOADER load_ult={
 	ULT_Cleanup,
 	ULT_LoadTitle
 };
-
 
 /* ex:set ts=4: */
