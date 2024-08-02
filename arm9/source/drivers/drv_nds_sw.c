@@ -41,7 +41,7 @@
 
 static struct NDS_SW_IPC* ipc = NULL;
 
-static void NDS_SW_CommandLine(CHAR *cmdline)
+static void NDS_SW_CommandLine(const CHAR *cmdline)
 {
     (void)cmdline;
 }
@@ -56,17 +56,17 @@ static BOOL NDS_SW_Init(void)
     md_mode|=DMODE_SOFT_MUSIC|DMODE_SOFT_SNDFX;
     md_mode &= ~DMODE_STEREO;
 
-    ipc = (NDS_SW_IPC*)_mm_malloc(sizeof(NDS_SW_IPC));
+    ipc = (NDS_SW_IPC*)MikMod_malloc(sizeof(NDS_SW_IPC));
     if (ipc == NULL)
     {
         MikMod_errno = MMERR_OUT_OF_MEMORY;
         return 1;
     }
 
-    ipc->buffer = (SBYTE*)_mm_malloc(BUFFERSIZE);
+    ipc->buffer = (SBYTE*)MikMod_malloc(BUFFERSIZE);
     if (ipc->buffer == NULL)
     {
-        _mm_free(ipc);
+        MikMod_free(ipc);
         ipc = NULL;
         MikMod_errno = MMERR_OUT_OF_MEMORY;
         return 1;
@@ -88,9 +88,9 @@ static void NDS_SW_Exit(void)
 {
     MikMod9_SendCommand(NDS_SW_CMD_EXIT << 28);
     VC_Exit();
-    _mm_free(ipc->buffer);
+    MikMod_free(ipc->buffer);
     ipc->buffer = NULL;
-    _mm_free(ipc);
+    MikMod_free(ipc);
     ipc = NULL;
 }
 

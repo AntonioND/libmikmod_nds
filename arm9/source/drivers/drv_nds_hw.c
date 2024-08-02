@@ -41,7 +41,7 @@
 
 static NDS_HW_IPC* ipc = NULL;
 
-static void NDS_HW_CommandLine(CHAR *cmdline)
+static void NDS_HW_CommandLine(const CHAR *cmdline)
 {
     (void)cmdline;
 }
@@ -81,7 +81,7 @@ static SWORD NDS_HW_SampleLoad(struct SAMPLOAD* sload, int type)
 
     SL_SampleSigned(sload);
 
-    ipc->samples[handle] = _mm_malloc(s->length << ((s->flags & SF_16BITS) ? 1 : 0));
+    ipc->samples[handle] = MikMod_malloc(s->length << ((s->flags & SF_16BITS) ? 1 : 0));
     if (ipc->samples[handle] == NULL)
     {
         _mm_errno = MMERR_SAMPLE_TOO_BIG;
@@ -102,7 +102,7 @@ static void NDS_HW_SampleUnload(SWORD handle)
     ASSERT(handle >= 0);
     ASSERT(handle < NDS_HW_MAXSAMPLES);
 
-    _mm_free(ipc->samples[handle]);
+    MikMod_free(ipc->samples[handle]);
     ipc->samples[handle] = NULL;
 }
 
@@ -126,7 +126,7 @@ static ULONG NDS_HW_RealSampleLength(int type, SAMPLE* s)
 
 static BOOL NDS_HW_Init(void)
 {
-    ipc = (NDS_HW_IPC*)_mm_malloc(sizeof(NDS_HW_IPC));
+    ipc = (NDS_HW_IPC*)MikMod_malloc(sizeof(NDS_HW_IPC));
     if (ipc == NULL)
         return 1;
 
@@ -140,7 +140,7 @@ static BOOL NDS_HW_Init(void)
 static void NDS_HW_Exit(void)
 {
     MikMod9_SendCommand(NDS_HW_CMD_EXIT << 28);
-    _mm_free(ipc);
+    MikMod_free(ipc);
     ipc = NULL;
 }
 
