@@ -5,7 +5,8 @@ http://blog.dev-scene.com/flatware
 This is an unofficial Nintendo DS port of libmikmod, a portable sound
 library for playing various music modules like MOD, S3M, IT, etc.
 
-It is based on libmikmod 3.3.11.1, commit 0e5b74433880.
+It is based on libmikmod 3.3.11.1, commit 0e5b74433880 from its official
+repository: https://sourceforge.net/p/mikmod/mikmod/ci/master/tree/libmikmod/
 
 ## Using the library
 
