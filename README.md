@@ -1,5 +1,7 @@
 # libmikmod 3.3.11.1 for NDS
 
+## Introduction
+
 http://blog.dev-scene.com/flatware
 
 This is an unofficial Nintendo DS port of libmikmod, a portable sound
@@ -7,6 +9,24 @@ library for playing various music modules like MOD, S3M, IT, etc.
 
 It is based on libmikmod 3.3.11.1, commit 0e5b74433880 from its official
 repository: https://sourceforge.net/p/mikmod/mikmod/ci/master/tree/libmikmod/
+
+## Install
+
+Simply run this to build and install the library in your BlocksDS environment:
+
+```bash
+make install
+```
+
+## Examples
+
+Once you have installed the library, go to the folder of an example and run:
+
+```bash
+make
+```
+
+This will generate a NDS file that you can test with flashcarts or emulators.
 
 ## Using the library
 
