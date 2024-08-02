@@ -27,7 +27,7 @@ void NDS_SW7_Start()
 		SOUND_REPEAT |
 		SOUND_VOL(127) |
 		SOUND_PAN(64) |
-		((ipc->format == 8) ? SOUND_8BIT : SOUND_16BIT);
+		((ipc->format == 8) ? SOUND_FORMAT_8BIT : SOUND_FORMAT_16BIT);
 
 	ipc->playing = true;
 }
