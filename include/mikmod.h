@@ -795,50 +795,9 @@ MIKMODAPI extern MDRIVER* md_driver;   /* Current driver in use. */
 
 /* Known drivers list */
 
-MIKMODAPI extern struct MDRIVER drv_nos;    /* no sound */
-MIKMODAPI extern struct MDRIVER drv_pipe;   /* piped output */
-MIKMODAPI extern struct MDRIVER drv_raw;    /* raw file disk writer [music.raw] */
-MIKMODAPI extern struct MDRIVER drv_stdout; /* output to stdout */
-MIKMODAPI extern struct MDRIVER drv_wav;    /* RIFF WAVE file disk writer [music.wav] */
-MIKMODAPI extern struct MDRIVER drv_aiff;   /* AIFF file disk writer [music.aiff] */
-
-MIKMODAPI extern struct MDRIVER drv_ultra;  /* Linux Ultrasound driver */
-MIKMODAPI extern struct MDRIVER drv_sam9407;/* Linux sam9407 driver */
-
-MIKMODAPI extern struct MDRIVER drv_AF;     /* Dec Alpha AudioFile */
-MIKMODAPI extern struct MDRIVER drv_ahi;    /* Amiga AHI */
-MIKMODAPI extern struct MDRIVER drv_aix;    /* AIX audio device */
-MIKMODAPI extern struct MDRIVER drv_alsa;   /* Advanced Linux Sound Architecture (ALSA) */
-MIKMODAPI extern struct MDRIVER drv_esd;    /* Enlightened sound daemon (EsounD) */
-MIKMODAPI extern struct MDRIVER drv_pulseaudio; /* PulseAudio  */
-MIKMODAPI extern struct MDRIVER drv_hp;     /* HP-UX audio device */
-MIKMODAPI extern struct MDRIVER drv_nas;    /* Network Audio System (NAS) */
-MIKMODAPI extern struct MDRIVER drv_oss;    /* OpenSound System (Linux,FreeBSD...) */
-MIKMODAPI extern struct MDRIVER drv_openal; /* OpenAL driver */
-MIKMODAPI extern struct MDRIVER drv_sdl;    /* SDL audio driver */
-MIKMODAPI extern struct MDRIVER drv_sgi;    /* SGI audio library */
-MIKMODAPI extern struct MDRIVER drv_sndio;  /* OpenBSD sndio */
-MIKMODAPI extern struct MDRIVER drv_sun;    /* Sun/NetBSD/OpenBSD audio device */
-
-MIKMODAPI extern struct MDRIVER drv_dart;   /* OS/2 Direct Audio RealTime */
-MIKMODAPI extern struct MDRIVER drv_os2;    /* OS/2 MMPM/2 */
-
-MIKMODAPI extern struct MDRIVER drv_ds;     /* Win32 DirectSound driver */
-MIKMODAPI extern struct MDRIVER drv_xaudio2;/* Win32 XAudio2 driver */
-MIKMODAPI extern struct MDRIVER drv_win;    /* Win32 multimedia API driver */
-
-MIKMODAPI extern struct MDRIVER drv_mac;    /* Macintosh Sound Manager driver */
-MIKMODAPI extern struct MDRIVER drv_osx;    /* MacOS X CoreAudio Driver */
-
-MIKMODAPI extern struct MDRIVER drv_dc;     /* Dreamcast driver */
-MIKMODAPI extern struct MDRIVER drv_gp32;   /* GP32 Sound driver */
-MIKMODAPI extern struct MDRIVER drv_psp;    /* PlayStation Portable driver */
-MIKMODAPI extern struct MDRIVER drv_n64;    /* Nintendo64 driver */
-
-MIKMODAPI extern struct MDRIVER drv_wss;    /* DOS WSS driver */
-MIKMODAPI extern struct MDRIVER drv_sb;     /* DOS S/B driver */
-
-MIKMODAPI extern struct MDRIVER drv_osles;  /* OpenSL ES driver for android */
+MIKMODAPI extern struct MDRIVER drv_nos;       /* no sound */
+MIKMODAPI extern struct MDRIVER drv_nds_sw;    /* Nintendo DS Software driver */
+MIKMODAPI extern struct MDRIVER drv_nds_hw;    /* Nintendo DS Hardware driver */
 
 /*========== Virtual channel mixer interface (for user-supplied drivers only) */
 
