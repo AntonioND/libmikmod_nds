@@ -94,9 +94,9 @@ int main(int argc, char *argv[])
     printf("\n");
     printf("Loading module from RAM\n");
 
-    // Player_LoadMemory() loads a module directly from memory it could be
+    // Player_LoadMem() loads a module directly from memory it could be
     // possible to use Player_Load() to load from FAT or NitroFS.
-    MODULE *module = Player_LoadMemory(module_bin, module_bin_size, 64, 0);
+    MODULE *module = Player_LoadMem((const char *)module_bin, module_bin_size, 64, 0);
     if (module == NULL)
     {
         printf("Could not load module, reason: \n%s\n",
