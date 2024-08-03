@@ -3,16 +3,12 @@
 # SPDX-FileContributor: Antonio Niño Díaz, 2024
 
 BLOCKSDS	?= /opt/blocksds/core
-
-# Source code paths
-
-BINDIRS		:= arm9/data
+BLOCKSDSEXT	?= /opt/blocksds/external
 
 # Libraries
 
 LIBS		:= -lnds9 -lmikmod9 -lc
-LIBDIRS		:= $(BLOCKSDS)/libs/libmikmod \
-		   $(BLOCKSDS)/libs/libnds
+LIBDIRS		:= $(BLOCKSDS)/libs/libnds \
+			   $(BLOCKSDSEXT)/libmikmod
 
 include $(BLOCKSDS)/sys/default_makefiles/rom_arm9arm7/Makefile.arm9
-

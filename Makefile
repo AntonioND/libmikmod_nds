@@ -2,13 +2,21 @@
 #
 # SPDX-FileContributor: Antonio Niño Díaz, 2023
 
+BLOCKSDS	?= /opt/blocksds/core
+BLOCKSDSEXT	?= /opt/blocksds/external
+
+# Build artifacts
+# ---------------
+
+INSTALLNAME	:= libmikmod
+
 # Tools
 # -----
 
-CP		:= cp
-INSTALL		:= install
 MAKE		:= make
 RM		:= rm -rf
+CP		:= cp
+INSTALL	:= install
 
 # Verbose flag
 # ------------
@@ -22,7 +30,7 @@ endif
 # Targets
 # -------
 
-.PHONY: all arm7 arm9 docs clean install
+.PHONY: all arm7 arm9 clean docs install
 
 all: arm9 arm7
 
@@ -36,15 +44,11 @@ clean:
 	@echo "  CLEAN"
 	@$(RM) $(VERSION_HEADER) lib build
 
-INSTALLDIR	?= /opt/blocksds/core/libs/libmikmod
-INSTALLDIR_ABS	:= $(abspath $(INSTALLDIR))
-
 install: all
-	@echo "  INSTALL $(INSTALLDIR_ABS)"
-	@test $(INSTALLDIR_ABS)
-	$(V)$(RM) $(INSTALLDIR_ABS)
-	$(V)$(INSTALL) -d $(INSTALLDIR_ABS)
-	$(V)$(CP) -r include lib COPYING* $(INSTALLDIR_ABS)
+	@echo "  INSTALL $(BLOCKSDSEXT)/$(INSTALLNAME)/"
+	$(V)$(RM) $(BLOCKSDSEXT)/$(INSTALLNAME)/
+	$(V)$(INSTALL) -d $(BLOCKSDSEXT)/$(INSTALLNAME)/
+	$(V)$(CP) -r include lib COPYING* $(BLOCKSDSEXT)/$(INSTALLNAME)/
 
 docs:
 	@echo "  DOXYGEN"
